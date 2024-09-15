@@ -1,0 +1,539 @@
+from py2neo import Graph
+
+#connexion à la base de données
+try:
+    graph = Graph('bolt://localhost:7687', auth=('neo4j', 'ok'))
+    print('SUCCESS: Connected to the Neo4j Database.')
+except Exception as e:
+    print('ERROR: Could not connect to the Neo4j Database. See console for details.')
+    raise SystemExit(e)
+
+
+create_nodes = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+MERGE (n9:Not_Plant:Ingredient {not_plant_ingredient: row.not_plant_ingredient})
+MERGE (r3:Remedy {remedy_number: row.Remedy})
+MERGE (i:Ingredient {ingredient_name: row.used})
+MERGE (p:Plant:Ingredient {name: row.plant})
+MERGE (f:Fruit:Ingredient {name: row.fruit})
+MERGE (s:Seed:Ingredient {name: row.seed})
+MERGE (p1:Pulp_of_Seed:Ingredient {name: row.pulp_of_seed})
+MERGE (p2:Pulp_of_Fruit:Ingredient {name: row.pulp_of_fruit})
+MERGE (v:Vessel:Ingredient {name: row.vessel})
+MERGE (f1:Flower:Ingredient {name: row.flower})
+MERGE (f2:Flower_Buds:Ingredient {name: row.flower_buds})
+MERGE (p3:Peel:Ingredient {name: row.peel})
+MERGE (c:Seed_Core:Ingredient {name: row.seed_core})
+MERGE (l:Leaf:Ingredient {name: row.leaf})
+MERGE (s2:Stem:Ingredient {name: row.stem})
+MERGE (s3:Stalk:Ingredient {name: row.stalk})
+MERGE (r:Root:Ingredient {name: row.root})
+MERGE (r1:Root_Peel:Ingredient {name: row.root_peel})
+MERGE (t1:Twig:Ingredient {name: row.twig})
+MERGE (b1:Bark:Ingredient {name: row.bark})
+MERGE (m:Mucilage:Ingredient {name: row.mucilage})
+MERGE (s4:Sap:Ingredient {name: row.sap})
+MERGE (i1:Inner_Skin:Ingredient {name: row.inner_skin})
+MERGE (s5:Shell:Ingredient {name: row.shell})
+MERGE (g:Gall:Ingredient {name: row.gall})
+MERGE (t:Transformation {transformed_part: row.transformation})
+MERGE (a:ScientificName {scientific_name: row.scientific_name }) 
+MERGE (h:Family {family_name: row.family})""").data()
+
+# , scientific_synonyms:row.scientific_synonyms , active_ingredients:row.active_ingredients , toxicity:row.toxicity , geographic_origin:row.geographic_origin
+
+remove_none_plant = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(p:Plant:Ingredient {name: 'none'}) detach delete p""").data()
+
+plant_to_sci_name = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(p:Plant {name: row.plant}) match(a:ScientificName {scientific_name: row.scientific_name}) merge (p)-[:IS]-(a)""").data()
+
+sci_name_to_family = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(h:Family {family_name: row.family}) match(a:ScientificName {scientific_name: row.scientific_name }) merge (a)-[:PartOfFamily]-(h)""").data()
+
+### Fruit's branch
+
+#fruit
+fruit_plant = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(p:Plant:Ingredient {name: row.plant}) match(f:Fruit:Ingredient {name: row.fruit}) merge (f)-[:PartOf]-(p)""").data()
+
+#seed 
+seed_fruit = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(f:Fruit:Ingredient {name: row.fruit}) match(s:Seed:Ingredient {name: row.seed}) merge (s)-[:PartOf]-(f)""").data()
+
+#independent seed
+seed_plant = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(p:Plant:Ingredient {name: row.plant}) match(f:Fruit:Ingredient {name: row.fruit}) match(s:Seed:Ingredient {name: row.seed}) where f.name = "none"  merge (s)-[:PartOf]-(p) ;""").data()
+
+#pulp of fruit 
+pulpoffruit_fruit = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(p2:Pulp_of_Fruit:Ingredient {name: row.pulp_of_fruit}) match(f:Fruit:Ingredient {name: row.fruit}) merge (p2)-[:PartOf]-(f)""").data()
+
+remove_none_pulpoffruit = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(p2:Pulp_of_Fruit:Ingredient {name: 'none'}) detach delete p2""").data()
+
+#inner skin 
+innerskin_fruit = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(i1:Inner_Skin:Ingredient {name: row.inner_skin}) match(f:Fruit:Ingredient {name: row.fruit}) merge (i1)-[:PartOf]-(f)""").data()
+
+remove_none_innerskin = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(i1:Inner_Skin:Ingredient {name: 'none'}) detach delete i1""").data()
+
+#shell
+shell_fruit = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(s5:Shell:Ingredient {name: row.shell}) match(f:Fruit:Ingredient {name: row.fruit}) merge (s5)-[:PartOf]-(f)""").data()
+
+remove_none_shell = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(s5:Shell:Ingredient {name: 'none'}) detach delete s5""").data()
+
+#peel
+peel_fruit = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(p3:Peel:Ingredient {name: row.peel}) match(f:Fruit:Ingredient {name: row.fruit}) merge (p3)-[:PartOf]-(f)""").data()
+
+remove_none_peel = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(p3:Peel:Ingredient {name: 'none'}) detach delete p3""").data()
+
+#independent peel
+peel_plant = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(p:Plant:Ingredient {name: row.plant}) match(f:Fruit:Ingredient {name: row.fruit}) match(p3:Peel:Ingredient {name: row.peel}) where f.name = "none"  merge (p3)-[:PartOf]-(p) ;""").data()
+
+#sap
+sap_fruit = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(s4:Sap:Ingredient {name: row.sap}) match(f:Fruit:Ingredient {name: row.fruit}) merge (s4)-[:PartOf]-(f)""").data()
+
+remove_none_sap = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(s4:Sap:Ingredient {name: 'none'}) detach delete s4""").data()
+
+#independent sap
+peel_plant = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(p:Plant:Ingredient {name: row.plant}) match(f:Fruit:Ingredient {name: row.fruit}) match(s4:Sap:Ingredient {name: row.sap}) where f.name = "none"  merge (s4)-[:PartOf]-(p) ;""").data()
+
+### Removal of NONE fruit
+remove_none_fruit = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(f:Fruit:Ingredient {name: 'none'}) detach delete f""").data()
+
+
+### Seed's branch
+
+#seed core
+seedcore_seed = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(c:Seed_Core:Ingredient {name: row.seed_core}) match(s:Seed:Ingredient {name: row.seed}) merge (c)-[:PartOf]-(s)""").data()
+remove_none_seedcore = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(c:Seed_Core:Ingredient {name: 'none'}) detach delete c""").data()
+
+#vessel 
+vessel_seed = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(v:Vessel:Ingredient {name: row.vessel}) match(s:Seed:Ingredient {name: row.seed}) merge (v)-[:PartOf]-(s)""").data()
+remove_none_vessel = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(v:Vessel:Ingredient {name: 'none'}) detach delete v""").data()
+
+#pulp of seed
+pulpofseed_seed = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(p1:Pulp_of_Seed:Ingredient {name: row.pulp_of_seed}) match(s:Seed:Ingredient {name: row.seed}) merge (p1)-[:PartOf]-(s)""").data()
+remove_none_vessel = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(p1:Pulp_of_Seed:Ingredient {name: 'none'}) detach delete p1""").data()
+
+#mucilage
+mucilage_seed = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(m:Mucilage:Ingredient {name: row.mucilage}) match(s:Seed:Ingredient {name: row.seed}) merge (m)-[:PartOf]-(s)""").data()
+remove_none_vessel = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(m:Mucilage:Ingredient {name: 'none'}) detach delete m""").data()
+
+#independent mucilage
+peel_plant = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(p:Plant:Ingredient {name: row.plant}) match(s:Seed:Ingredient {name: row.seed}) match(m:Mucilage:Ingredient {name: row.mucilage}) where s.name = "none"  merge (m)-[:PartOf]-(p) ;""").data()
+
+### Removal of NONE seed
+remove_none_seed = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(s:Seed:Ingredient {name: 'none'}) detach delete s""").data()
+
+### Flower's branch
+
+flowerbud_flower_plant = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(p:Plant:Ingredient {name: row.plant}) match(f1:Flower:Ingredient {name: row.flower}) match(f2:Flower_Buds:Ingredient {name: row.flower_buds}) merge (f2)-[:PartOf]-(f1)-[:PartOf]-(p)""").data()
+
+remove_none_flower = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(f1:Flower:Ingredient {name: 'none'}) detach delete f1""").data()
+
+remove_none_flowerbuds = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(f2:Flower_Buds:Ingredient {name: 'none'}) detach delete f2""").data()
+
+### Root's branch
+rootpeel_root_plant = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(p:Plant:Ingredient {name: row.plant}) match(r:Root:Ingredient {name: row.root}) match(r1:Root_Peel:Ingredient {name: row.root_peel}) merge (r1)-[:PartOf]-(r)-[:PartOf]-(p)""").data()
+
+remove_none_root = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(r:Root:Ingredient {name: 'none'}) detach delete r""").data()
+
+remove_none_rootpeel = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(r1:Root_Peel:Ingredient {name: 'none'}) detach delete r1""").data()
+
+### Bark's branch
+bark_plant = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(p:Plant:Ingredient {name: row.plant}) match(b1:Bark:Ingredient {name: row.bark}) merge (b1)-[:PartOf]-(p)""").data()
+remove_none_bark = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(b1:Bark:Ingredient {name: 'none'}) detach delete b1""").data()
+
+### Twig's branch
+twig_plant = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(p:Plant:Ingredient {name: row.plant}) match(t1:Twig:Ingredient {name: row.twig}) merge (t1)-[:PartOf]-(p)""").data()
+remove_none_twig = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(t1:Twig:Ingredient {name: 'none'}) detach delete t1""").data()
+
+### Leaf's branch
+leaf_plant = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(p:Plant:Ingredient {name: row.plant}) match(l:Leaf:Ingredient {name: row.leaf}) merge (l)-[:PartOf]-(p)""").data()
+remove_none_leaf = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(l:Leaf:Ingredient {name: 'none'}) detach delete l""").data()
+
+### Stalk's branch
+stalk_plant = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(p:Plant:Ingredient {name: row.plant}) match(s3:Stalk:Ingredient {name: row.stalk}) merge (s3)-[:PartOf]-(p)""").data()
+remove_none_stalk = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(s3:Stalk:Ingredient {name: 'none'}) detach delete s3""").data()
+
+
+###Stem's branch
+stem_plant = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(p:Plant:Ingredient {name: row.plant}) match(s2:Stem:Ingredient {name: row.stem}) merge (s2)-[:PartOf]-(p)""").data()
+remove_none_stem = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(s2:Stem:Ingredient {name: 'none'}) detach delete s2""").data()
+
+###Gall's branch
+gall_plant = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(p:Plant:Ingredient {name: row.plant}) match(g:Gall:Ingredient {name: row.gall}) merge (g)-[:PartOf]-(p)""").data()
+remove_none_gall = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(g:Gall:Ingredient {name: 'none'}) detach delete g""").data()
+
+
+
+# Transformations 
+
+transformation_to_plant = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(t:Transformation {transformed_part: row.transformation}) match(p:Plant {name: row.plant}) match(i:Ingredient {ingredient_name: row.used}) where p.name = i.ingredient_name merge (t)-[x:IsFrom {transformation_type:row.transformation_type}]-(p)""").data()
+
+transformation_to_fruit = graph.run("""
+LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+MATCH (t:Transformation {transformed_part: row.transformation})
+MATCH (f:Fruit:Ingredient {name: row.fruit})
+MATCH (i:Ingredient {ingredient_name: row.used})
+WHERE f.name = i.ingredient_name
+MERGE (t)-[:IsFrom {transformation_type:row.transformation_type}]-(f)
+""").data()
+
+transformation_to_seed = graph.run("""
+LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+MATCH (t:Transformation {transformed_part: row.transformation})
+MATCH (s:Seed:Ingredient {name: row.seed})
+MATCH (i:Ingredient {ingredient_name: row.used})
+WHERE s.name = i.ingredient_name
+MERGE (t)-[:IsFrom {transformation_type:row.transformation_type}]-(s)
+""").data()
+
+transformation_to_pulp_of_seed = graph.run("""
+LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+MATCH (t:Transformation {transformed_part: row.transformation})
+MATCH (p1:Pulp_of_Seed:Ingredient {name: row.pulp_of_seed})
+MATCH (i:Ingredient {ingredient_name: row.used})
+WHERE p1.name = i.ingredient_name
+MERGE (t)-[:IsFrom {transformation_type:row.transformation_type}]-(p1)
+""").data()
+
+transformation_to_pulp_of_fruit = graph.run("""
+LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+MATCH (t:Transformation {transformed_part: row.transformation})
+MATCH (p2:Pulp_of_Fruit:Ingredient {name: row.pulp_of_fruit})
+MATCH (i:Ingredient {ingredient_name: row.used})
+WHERE p2.name = i.ingredient_name
+MERGE (t)-[:IsFrom {transformation_type:row.transformation_type}]-(p2)
+""").data()
+
+transformation_to_vessel = graph.run("""
+LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+MATCH (t:Transformation {transformed_part: row.transformation})
+MATCH (v:Vessel:Ingredient {name: row.vessel})
+MATCH (i:Ingredient {ingredient_name: row.used})
+WHERE v.name = i.ingredient_name
+MERGE (t)-[:IsFrom {transformation_type:row.transformation_type}]-(v)
+""").data()
+
+transformation_to_flower = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(t:Transformation {transformed_part: row.transformation})
+match(f1:Flower:Ingredient {name: row.flower})
+match(i:Ingredient {ingredient_name: row.used})
+where f1.name = i.ingredient_name
+merge (t)-[x:IsFrom {transformation_type:row.transformation_type}]-(f1)""").data()
+
+transformation_to_flower_buds = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(t:Transformation {transformed_part: row.transformation})
+match(f2:Flower_Buds:Ingredient {name: row.flower_buds})
+match(i:Ingredient {ingredient_name: row.used})
+where f2.name = i.ingredient_name
+merge (t)-[x:IsFrom {transformation_type:row.transformation_type}]-(f2)""").data()
+
+transformation_to_peel = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(t:Transformation {transformed_part: row.transformation})
+match(p3:Peel:Ingredient {name: row.peel})
+match(i:Ingredient {ingredient_name: row.used})
+where p3.name = i.ingredient_name
+merge (t)-[x:IsFrom {transformation_type:row.transformation_type}]-(p3)""").data()
+
+transformation_to_seed_core = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(t:Transformation {transformed_part: row.transformation})
+match(c:Seed_Core:Ingredient {name: row.seed_core})
+match(i:Ingredient {ingredient_name: row.used})
+where c.name = i.ingredient_name
+merge (t)-[x:IsFrom {transformation_type:row.transformation_type}]-(c)""").data()
+
+transformation_to_leaf = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(t:Transformation {transformed_part: row.transformation})
+match(l:Leaf:Ingredient {name: row.leaf})
+match(i:Ingredient {ingredient_name: row.used})
+where l.name = i.ingredient_name
+merge (t)-[x:IsFrom {transformation_type:row.transformation_type}]-(l)""").data()
+
+transformation_to_stem = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(t:Transformation {transformed_part: row.transformation}) match(s2:Stem:Ingredient {name: row.stem}) match(i:Ingredient {ingredient_name: row.used}) where s2.name = i.ingredient_name merge (t)-[x:IsFrom {transformation_type:row.transformation_type}]-(s2)""").data()
+
+transformation_to_stalk = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(t:Transformation {transformed_part: row.transformation}) match(s3:Stalk:Ingredient {name: row.stalk}) match(i:Ingredient {ingredient_name: row.used}) where s3.name = i.ingredient_name merge (t)-[x:IsFrom {transformation_type:row.transformation_type}]-(s3)""").data()
+
+transformation_to_root = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(t:Transformation {transformed_part: row.transformation}) match(r:Root:Ingredient {name: row.root}) match(i:Ingredient {ingredient_name: row.used}) where r.name = i.ingredient_name merge (t)-[x:IsFrom {transformation_type:row.transformation_type}]-(r)""").data()
+
+transformation_to_root_peel = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(t:Transformation {transformed_part: row.transformation}) match(r1:Root_Peel:Ingredient {name: row.root_peel}) match(i:Ingredient {ingredient_name: row.used}) where r1.name = i.ingredient_name merge (t)-[x:IsFrom {transformation_type:row.transformation_type}]-(r1)""").data()
+
+transformation_to_twig = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(t:Transformation {transformed_part: row.transformation})
+match(t1:Twig:Ingredient {name: row.twig})
+match(i:Ingredient {ingredient_name: row.used})
+where t1.name = i.ingredient_name
+merge (t)-[x:IsFrom {transformation_type:row.transformation_type}]-(t1)""").data()
+
+transformation_to_bark = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(t:Transformation {transformed_part: row.transformation})
+match(b1:Bark:Ingredient {name: row.bark})
+match(i:Ingredient {ingredient_name: row.used})
+where b1.name = i.ingredient_name
+merge (t)-[x:IsFrom {transformation_type:row.transformation_type}]-(b1)""").data()
+
+transformation_to_mucilage = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(t:Transformation {transformed_part: row.transformation})
+match(m:Mucilage:Ingredient {name: row.mucilage})
+match(i:Ingredient {ingredient_name: row.used})
+where m.name = i.ingredient_name
+merge (t)-[x:IsFrom {transformation_type:row.transformation_type}]-(m)""").data()
+
+transformation_to_sap = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(t:Transformation {transformed_part: row.transformation})
+match(s4:Sap:Ingredient {name: row.sap})
+match(i:Ingredient {ingredient_name: row.used})
+where s4.name = i.ingredient_name
+merge (t)-[x:IsFrom {transformation_type:row.transformation_type}]-(s4)""").data()
+
+transformation_to_innerskin = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(t:Transformation {transformed_part: row.transformation})
+match(i1:Inner_Skin:Ingredient {name: row.inner_skin})
+match(i:Ingredient {ingredient_name: row.used})
+where i1.name = i.ingredient_name
+merge (t)-[x:IsFrom {transformation_type:row.transformation_type}]-(i1)""").data()
+
+transformation_to_shell = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(t:Transformation {transformed_part: row.transformation})
+match(s5:Shell:Ingredient {name: row.shell})
+match(i:Ingredient {ingredient_name: row.used})
+where s5.name = i.ingredient_name
+merge (t)-[x:IsFrom {transformation_type:row.transformation_type}]-(s5)""").data()
+
+transformation_to_gall = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(t:Transformation {transformed_part: row.transformation})
+match(g:Gall:Ingredient {name: row.gall})
+match(i:Ingredient {ingredient_name: row.used})
+where g.name = i.ingredient_name
+merge (t)-[x:IsFrom {transformation_type:row.transformation_type}]-(g)""").data()
+
+remedy_to_transformation = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy}) match(t:Transformation {transformed_part: row.transformation}) where t.transformed_part <> "none" merge (r3)-[z:ContainsTransformed {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(t) ;""").data()
+
+remove_none_transformation = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(t:Transformation {transformed_part: 'none'}) detach delete t""").data()
+
+
+### remedies
+
+remedy_to_used_not_plant = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy}) match(n9:Not_Plant:Ingredient {not_plant_ingredient: row.not_plant_ingredient}) where n9.not_plant_ingredient <> "none" merge (r3)-[z:Contains {Original_ingredient:row.not_plant_ingredient , not_plant_type:row.not_plant_type , Specified_origin:row.specified_origin}]-(n9) """).data()
+remove_none_notplant = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(n9:Not_Plant:Ingredient {not_plant_ingredient: 'none'}) detach delete n9""").data()
+
+remedy_to_used_plant = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy}) match(p:Plant {name: row.plant}) match(i:Ingredient {ingredient_name: row.used}) where p.name = i.ingredient_name merge (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(p)""").data()
+
+remedy_to_used_fruit = graph.run("""
+LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy})
+MATCH (f:Fruit:Ingredient {name: row.fruit})
+MATCH (i:Ingredient {ingredient_name: row.used})
+WHERE f.name = i.ingredient_name
+MERGE (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(f)
+""").data()
+
+remedy_to_used_seed = graph.run("""
+LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy})
+MATCH (s:Seed:Ingredient {name: row.seed})
+MATCH (i:Ingredient {ingredient_name: row.used})
+WHERE s.name = i.ingredient_name
+MERGE (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(s)
+""").data()
+
+remedy_to_used_pulp_of_seed = graph.run("""
+LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy})
+MATCH (p1:Pulp_of_Seed:Ingredient {name: row.pulp_of_seed})
+MATCH (i:Ingredient {ingredient_name: row.used})
+WHERE p1.name = i.ingredient_name
+MERGE (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(p1)
+""").data()
+
+remedy_to_used_pulp_of_fruit = graph.run("""
+LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy})
+MATCH (p2:Pulp_of_Fruit:Ingredient {name: row.pulp_of_fruit})
+MATCH (i:Ingredient {ingredient_name: row.used})
+WHERE p2.name = i.ingredient_name
+MERGE (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(p2)
+""").data()
+
+remedy_to_used_vessel = graph.run("""
+LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy})
+MATCH (v:Vessel:Ingredient {name: row.vessel})
+MATCH (i:Ingredient {ingredient_name: row.used})
+WHERE v.name = i.ingredient_name
+MERGE (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(v)
+""").data()
+
+remedy_to_used_flower = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy})
+match(f1:Flower:Ingredient {name: row.flower})
+match(i:Ingredient {ingredient_name: row.used})
+where f1.name = i.ingredient_name
+merge (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(f1)""").data()
+
+remedy_to_used_flower_buds = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy})
+match(f2:Flower_Buds:Ingredient {name: row.flower_buds})
+match(i:Ingredient {ingredient_name: row.used})
+where f2.name = i.ingredient_name
+merge (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(f2)""").data()
+
+remedy_to_used_peel = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy})
+match(p3:Peel:Ingredient {name: row.peel})
+match(i:Ingredient {ingredient_name: row.used})
+where p3.name = i.ingredient_name
+merge (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(p3)""").data()
+
+remedy_to_used_seed_core = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy})
+match(c:Seed_Core:Ingredient {name: row.seed_core})
+match(i:Ingredient {ingredient_name: row.used})
+where c.name = i.ingredient_name
+merge (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(c)""").data()
+
+remedy_to_used_leaf = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy})
+match(l:Leaf:Ingredient {name: row.leaf})
+match(i:Ingredient {ingredient_name: row.used})
+where l.name = i.ingredient_name
+merge (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(l)""").data()
+
+remedy_to_used_stem = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy}) match(s2:Stem:Ingredient {name: row.stem}) match(i:Ingredient {ingredient_name: row.used}) where s2.name = i.ingredient_name merge (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(s2)""").data()
+
+remedy_to_used_stalk = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy}) match(s3:Stalk:Ingredient {name: row.stalk}) match(i:Ingredient {ingredient_name: row.used}) where s3.name = i.ingredient_name merge (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(s3)""").data()
+
+remedy_to_used_root = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy}) match(r:Root:Ingredient {name: row.root}) match(i:Ingredient {ingredient_name: row.used}) where r.name = i.ingredient_name merge (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(r)""").data()
+
+remedy_to_used_root_peel = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy}) match(r1:Root_Peel:Ingredient {name: row.root_peel}) match(i:Ingredient {ingredient_name: row.used}) where r1.name = i.ingredient_name merge (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(r1)""").data()
+
+remedy_to_used_twig = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy})
+match(t1:Twig:Ingredient {name: row.twig})
+match(i:Ingredient {ingredient_name: row.used})
+where t1.name = i.ingredient_name
+merge (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(t1)""").data()
+
+remedy_to_used_bark = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy})
+match(b1:Bark:Ingredient {name: row.bark})
+match(i:Ingredient {ingredient_name: row.used})
+where b1.name = i.ingredient_name
+merge (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(b1)""").data()
+
+remedy_to_used_mucilage = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy})
+match(m:Mucilage:Ingredient {name: row.mucilage})
+match(i:Ingredient {ingredient_name: row.used})
+where m.name = i.ingredient_name
+merge (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(m)""").data()
+
+remedy_to_used_sap = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy})
+match(s4:Sap:Ingredient {name: row.sap})
+match(i:Ingredient {ingredient_name: row.used})
+where s4.name = i.ingredient_name
+merge (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(s4)""").data()
+
+remedy_to_used_innerskin = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy})
+match(i1:Inner_Skin:Ingredient {name: row.inner_skin})
+match(i:Ingredient {ingredient_name: row.used})
+where i1.name = i.ingredient_name
+merge (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(i1)""").data()
+
+remedy_to_used_shell = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy})
+match(s5:Shell:Ingredient {name: row.shell})
+match(i:Ingredient {ingredient_name: row.used})
+where s5.name = i.ingredient_name
+merge (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(s5)""").data()
+
+remedy_to_used_gall = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match(r3:Remedy {remedy_number: row.Remedy})
+match(g:Gall:Ingredient {name: row.gall})
+match(i:Ingredient {ingredient_name: row.used})
+where g.name = i.ingredient_name
+merge (r3)-[z:Contains {Original_ingredient:row.Ingredients , Specified_origin:row.specified_origin}]-(g)""").data()
+
+remove_ing = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row 
+match(i:Ingredient {ingredient_name: row.used}) detach delete i""").data()
+
+
+
+remove_rel_where_transformed = graph.run("""LOAD CSV WITH HEADERS FROM 'file:///ontology1.csv' as row
+match((r3)-[z:Contains]-(p)) match((t)-[x:ContainsTransformed]-(i)) where z.Original_ingredient = x.Original_ingredient detach delete z""").data()
+
+
+create_symptoms = graph.run("""LOAD CSV WITH HEADERS FROM "file:///symptoms.csv" AS row
+MERGE (sm:Symptom {symptom_name: row.Symptoms})""").data()
+
+remedy_to_symptoms = graph.run("""LOAD CSV WITH HEADERS FROM "file:///symptoms.csv" AS row
+MATCH(r3:Remedy {remedy_number: row.Remedy}) match(sm:Symptom {symptom_name: row.Symptoms})MERGE (r3)-[:Treats]->(sm)""").data()
+
+create_organs = graph.run("""LOAD CSV WITH HEADERS FROM "file:///organs.csv" AS row
+MERGE (or:Organ {organ_name: row.Organs})""").data()
+
+remedy_to_organs = graph.run("""LOAD CSV WITH HEADERS FROM "file:///organs.csv" AS row
+MATCH(r3:Remedy {remedy_number: row.Remedy}) match(or:Organ {organ_name: row.Organs})MERGE (r3)-[:ActsOn]->(or)""").data()
+
+
+create_types = graph.run("""LOAD CSV WITH HEADERS FROM "file:///types.csv" AS row
+MERGE (ty:Type {type_name: row.Type})""").data()
+
+remedy_to_type = graph.run("""LOAD CSV WITH HEADERS FROM "file:///types.csv" AS row
+MATCH(r3:Remedy {remedy_number: row.Remedy}) match(ty:Type {type_name: row.Type})MERGE (r3)-[:IsType]->(ty)""").data()

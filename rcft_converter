@@ -1,0 +1,223 @@
+from py2neo import Graph
+try:
+    graph = Graph('bolt://localhost:7687', auth=('neo4j', 'ok'))  # Ensure correct credentials
+    print('SUCCESS: Connected to the Neo4j Database.')
+except Exception as e:
+    print('ERROR: Could not connect to the Neo4j Database. See console for details.')
+    raise SystemExit(e)
+
+with open("final_rcft.rcft", "w") as fichier:
+    fichier.write("FormalContext IngredientToScientificAndFamilyNames\n")
+    fichier.write("algo fca\n")
+
+    # for first query
+    query = """
+    MATCH (f:Family)<-[:PartOfFamily]-(sn:ScientificName)<-[:IS]-(i:Ingredient)
+    OPTIONAL MATCH (i)<-[:PartOf*0..7]-(i2:Ingredient)
+    WITH DISTINCT i, i2, sn, f
+    WHERE i2 IS NOT NULL
+    RETURN i.name AS IngredientName, i2.name AS IndirectIngredientName, 
+           sn.scientific_name AS ScientificName, f.family_name AS FamilyName
+    """
+    results = graph.run(query).data()
+
+    # dictionaries to store mappings
+    ingredient_to_sn = {}
+    ingredient_to_fn = {}
+
+    # sets for unique scientific names, family names, and ingredients
+    scientific_names = set()
+    family_names = set()
+    ingredients1 = set()
+
+    # query results
+    for result in results:
+        # Direct ingredient processing
+        direct_ingredient = result['IngredientName']
+        ingredients1.add(direct_ingredient)
+
+        # for the indirect ingredient processing
+        indirect_ingredient = result['IndirectIngredientName']
+        ingredients1.add(indirect_ingredient)
+
+        # Scientific and Family names processing, excluding 'none'
+        sn = result['ScientificName']
+        fn = result['FamilyName']
+        if sn.lower() != 'none':
+            scientific_names.add(sn)
+            # Map both direct and indirect ingredients to their SN and FN
+            ingredient_to_sn[direct_ingredient] = sn
+            ingredient_to_sn[indirect_ingredient] = sn
+        if fn.lower() != 'none':
+            family_names.add(fn)
+            ingredient_to_fn[direct_ingredient] = fn
+            ingredient_to_fn[indirect_ingredient] = fn
+
+    # prepare the header
+    sorted_scientific_names = sorted(scientific_names)
+    sorted_family_names = sorted(family_names)
+    all_attributes = sorted_scientific_names + sorted_family_names
+    fichier.write("||" + "|".join(all_attributes) + "|\n")
+
+    # mapping 'X' matrix
+    for ingredient in sorted(ingredients1):
+        line = "|" + ingredient
+        for attr in all_attributes:
+            mapped_sn = ingredient_to_sn.get(ingredient)
+            mapped_fn = ingredient_to_fn.get(ingredient)
+            if attr == mapped_sn or attr == mapped_fn:
+                line += "|X"
+            else:
+                line += "| "
+        line += "|\n"
+        fichier.write(line)
+
+    fichier.write("FormalContext RemedyToType\n")
+    fichier.write("algo fca\n")
+
+    query = """
+    MATCH (r:Remedy)-[:IsType]->(t:Type)
+    RETURN r, t
+    """
+    results = graph.run(query).data()
+
+    remedies = set()
+    types = set()
+    remedy_to_type = {}  # Maps remedy_number to type_name
+
+    for result in results:
+        remedy_number = result['r']['remedy_number']
+        type_name = result['t']['type_name']
+
+        remedies.add(remedy_number)
+        types.add(type_name)
+        # Initialize the mapping for this remedy if not already done
+        if remedy_number not in remedy_to_type:
+            remedy_to_type[remedy_number] = set()
+        remedy_to_type[remedy_number].add(type_name)
+
+    sorted_remedies = sorted(remedies)
+    sorted_types = sorted(types)
+
+    fichier.write("||" + "|".join(sorted_types) + "|\n")
+    for remedy in sorted_remedies:
+        line = "|" + remedy
+        for type_name in sorted_types:
+            if type_name in remedy_to_type[remedy]:
+                line += "|X"  # Mark 'X' if the remedy is associated with the type
+            else:
+                line += "| "
+        line += "|\n"
+        fichier.write(line)
+
+
+
+    #écriture dans le fichier de l'en-tête d'un contexte objet-attribut, à adapter avec le nom du contexte à créer     
+    fichier.write("\nRelationalContext a-remede")
+
+#contexte source du contexte relationnel
+    fichier.write("\nsource RemedyToType")
+
+#contexte cible du contexte relationnel
+    fichier.write("\ntarget IngredientToScientificAndFamilyNames") 
+
+#opérateur de scaling utilisé pour RCA
+    fichier.write("\nscaling exist\n")
+ 
+
+    # new query…. almost there
+    query = """
+    MATCH (r:Remedy)-[:Contains]->(i:Ingredient)
+    OPTIONAL MATCH (r)-[:ContainsTransformed]->(t:Transformation)-[:IsFrom]->(i2:Ingredient)
+    RETURN r.remedy_number AS remedy_number, i.name AS ingredient_name, i2.name AS transformed_ingredient_name
+    """
+    results = graph.run(query).data()
+
+    # Initialize containers for remedies and ingredients
+    remedies = set()
+    ingredients2 = set()
+    remedy_to_ingredients = {}  # Pre-initialize mapping for each remedy
+
+    
+    for result in results:
+        remedy_number = result['remedy_number']
+        remedies.add(remedy_number)
+        
+        # check if remedy is in the mapping, even if it maps to an empty set initially
+        remedy_to_ingredients.setdefault(remedy_number, set())
+
+        ingredient_name = result['ingredient_name']
+        transformed_ingredient_name = result.get('transformed_ingredient_name')
+
+        if ingredient_name:  # Check ingredient_name is not None before adding
+            ingredients2.add(ingredient_name)
+            remedy_to_ingredients[remedy_number].add(ingredient_name)
+        if transformed_ingredient_name:  # Check transformed_ingredient_name is not None before adding
+            ingredients2.add(transformed_ingredient_name)
+            remedy_to_ingredients[remedy_number].add(transformed_ingredient_name)
+
+    
+    sorted_remedies = sorted(remedies)
+    sorted_ingredients = sorted(ingredients2)
+
+    fichier.write("||" + "|".join(sorted_ingredients) + "|\n")
+
+    for remedy in sorted_remedies:
+        line = "|" + remedy
+        for ingredient in sorted_ingredients:
+            if ingredient in remedy_to_ingredients[remedy]:
+                line += "|X"  # Mark 'X' if the remedy contains the ingredient
+            else:
+                line += "| "
+        line += "|\n"
+        fichier.write(line)
+
+print("RCFT file has been created successfully.")
+
+
+# find the ingredients unique to Table 1 and not present in Table 3
+unique_to_table_1 = ingredients1 - ingredients2
+
+# this is a temporary storage for the new content of the RCFT file
+new_content = []
+
+# original RCFT file to read its contents
+with open("final1.rcft", "r") as file:
+    lines = file.readlines()
+    section = None  # Track the current section of the RCFT file
+    capturing = True  # Use this flag to start/stop capturing lines based on section
+
+    for line in lines:
+        if "FormalContext IngredientToScientificAndFamilyNames" in line:
+            section = 'ingredients1'
+            capturing = True  # Start capturing lines again
+            new_content.append(line)  # Keep the section header
+        elif "FormalContext RemedyToType" in line or "RelationalContext" in line:
+            section = 'other'
+            capturing = True  # Keep capturing lines, but now we are in a different section
+            new_content.append(line)  # Change section, keep this and following lines
+        elif section == 'ingredients1' and capturing:
+            # Attempt to extract the ingredient name safely
+            parts = line.split("|")
+            if len(parts) > 1:  # this is to make sure the line has enough parts to represent an ingredient
+                ingredient = parts[1].strip()
+                if ingredient not in unique_to_table_1:
+                    new_content.append(line)
+            else:
+     
+                new_content.append(line)
+        elif capturing:
+         
+            new_content.append(line)
+
+
+with open("final_corrige_2.rcft", "w") as file:
+    file.writelines(new_content)
+
+print("RCFT file has been updated successfully.") 
+
+
+
+
+
+
